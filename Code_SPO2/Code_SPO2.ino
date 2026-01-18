@@ -1,42 +1,73 @@
 
 
 #include <Wire.h>    // This library allows I2C communication
-#include "MAX30102.h" // Library 
-MAX30102 bioSensor;
+#include "MAX30105.h" // Library 
+MAX30105 bioSensor;
 
 
 int devicesConnected = 0;
+long samples_Taken = 0;
+bool PLOT_MODE = true;
+
 
 void setup() {
   
   Serial.begin(115200); // WHY THIS VALUE
   delay(3000);
-  Serial.println("ESP32 ready.");
-
   Wire.begin();
-  Serial.println("I2C initialized.");
+
+  if(!PLOT_MODE) {
+    Serial.println("ESP32 ready.");
+    Serial.println("I2C initialized.");
+    devicesConnected = 0;
+    countDevices();
+    if (devicesConnected == 0){
+    Serial.println("No I2C devices found.");
+    }else{
+    Serial.println("Search of devices finished.");
+    }
+    delay(2000);
+  }
+   
 
   while ( !bioSensor.begin(Wire)){
-    Serial.println("MAX30102 not found.");
+    if (!PLOT_MODE) Serial.println("MAX30102 not found.");
     delay(1000);
   }
-  Serial.println("MAX30102 initialized.");
+  if (!PLOT_MODE) Serial.println("MAX30102 initialized.");
 
-  byte LED_Brightness = 70;
+  byte LED_Brightness = 70;  // Range between 0 - 255 
+  byte LED_Mode = 2;
+  byte sample_Average = 4; // Possible 1,2,4,8,16,32
+  int sample_Rate = 100;   // Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
+  int pulse_Width = 411;  // Possible 69,118,215,411
+  int ADC_Range = 16384; // Options: 2048, 4096, 8192, 16384
+
+  bioSensor.setup(LED_Brightness, sample_Average, LED_Mode, sample_Rate, pulse_Width, ADC_Range);
+
 
 }
  
 void loop() {
 
-  devicesConnected = 0;
-  countDevices();
+  bioSensor.check();
+  while(bioSensor.available()){
+    samples_Taken++;
+    //Serial.print("Red = ");
+    uint32_t red = bioSensor.getFIFORed();
+    uint32_t ir = bioSensor.getFIFOIR();
+    Serial.print("RED:");
+    Serial.print(red);
+    Serial.print("  ");
+    Serial.print("IR:");
+    Serial.println(ir);
 
-  if (devicesConnected == 0){
-    Serial.println("No I2C devices found.");
-  }else{
-    Serial.println("Search of devices finished.");
+
+    bioSensor.nextSample();  // Sample finished, move to the next sample
   }
-  delay(3000);
+  
+
+
 }
 
 int countDevices(){ 
