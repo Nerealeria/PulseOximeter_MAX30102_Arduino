@@ -9,6 +9,9 @@ int devicesConnected = 0;
 long samples_Taken = 0;
 bool PLOT_MODE = true;
 
+int countDevices();
+int32_t removeDC(uint32_t IR_raw);
+
 
 void setup() {
   
@@ -36,12 +39,12 @@ void setup() {
   }
   if (!PLOT_MODE) Serial.println("MAX30102 initialized.");
 
-  byte LED_Brightness = 70;  // Range between 0 - 255 
-  byte LED_Mode = 2;
-  byte sample_Average = 4; // Possible 1,2,4,8,16,32
-  int sample_Rate = 100;   // Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
-  int pulse_Width = 411;  // Possible 69,118,215,411
-  int ADC_Range = 16384; // Options: 2048, 4096, 8192, 16384
+  const byte LED_Brightness = 70;  // Range between 0 - 255 
+  const byte LED_Mode = 2;
+  const byte sample_Average = 4; // Possible 1,2,4,8,16,32
+  const int sample_Rate = 100;   // Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
+  const int pulse_Width = 411;  // Possible 69,118,215,411
+  const int ADC_Range = 16384; // Options: 2048, 4096, 8192, 16384
 
   bioSensor.setup(LED_Brightness, sample_Average, LED_Mode, sample_Rate, pulse_Width, ADC_Range);
 
@@ -55,17 +58,24 @@ void loop() {
     samples_Taken++;
     //Serial.print("Red = ");
     uint32_t red = bioSensor.getFIFORed();
-    uint32_t ir = bioSensor.getFIFOIR();
-    Serial.print("RED:");
-    Serial.print(red);
-    Serial.print("  ");
-    Serial.print("IR:");
-    Serial.println(ir);
+    uint32_t ir_raw = bioSensor.getFIFOIR();
+    int32_t ir_ac = removeDC(ir_raw);
+    int32_t ir_filtered = smoothSignal(ir_ac);
 
+    //Serial.print("RED:");
+    //Serial.print(red);
+    //Serial.print("  ");
+    //Serial.print("IR_raw:");
+    //Serial.print(ir_raw);
+    //Serial.print(" ");
+    Serial.print("IR_ac:");
+    Serial.print(ir_ac * 50);
+    Serial.print(" "); 
+    Serial.print("IR_filtered:");
+    Serial.println(ir_filtered * 50);
 
     bioSensor.nextSample();  // Sample finished, move to the next sample
   }
-  
 
 
 }
@@ -88,4 +98,38 @@ int countDevices(){
     }
   }
   return devicesConnected;
+}
+
+int32_t removeDC(uint32_t ir_raw){
+  const int N = 100; // DC baseline window lenght, 1s window at 100 Hz
+  static uint32_t buffer[N]; // Stores last N samples, circular buffer
+  static uint64_t sum = 0;
+  static int i = 0; 
+  static int count = 0;
+  
+  sum -= buffer[i]; // This removes the oldest value from sum
+  buffer[i] = ir_raw;
+  sum += ir_raw; 
+  i = (i+1) % N; // Update index in a circular way
+  if (count < N) count++;
+  int32_t dc = sum/count;
+  int32_t ac = ir_raw - dc;
+  return ac;
+}
+
+int32_t smoothSignal(int32_t ir_ac){
+
+  const int M = 5; 
+  static uint32_t buffer[M]; 
+  static uint64_t sum = 0;
+  static int i = 0; 
+  static int count = 0;
+  
+  sum -= buffer[i]; // This removes the oldest value from sum
+  buffer[i] = ir_ac;
+  sum += ir_ac; 
+  i = (i+1) % M; // Update index in a circular way
+  if (count < M) count++;
+  int32_t ir_filtered = sum/count;
+  return ir_filtered;
 }
